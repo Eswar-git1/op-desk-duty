@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import Game from './pages/Game';
 import Auth from './pages/Auth';
 import Leaderboard from './pages/Leaderboard';
+import SetUsername from './pages/SetUsername';
 import PrivateRoute from './components/PrivateRoute';
 import { useEffect } from 'react';
 import { useGameStore } from './lib/store';
@@ -30,9 +31,9 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Redirect root to Auth */}
         <Route path="/" element={<Navigate to="/auth" replace />} />
         <Route path="/auth" element={<Auth />} />
+        <Route path="/set-username" element={<SetUsername />} />
         <Route
           path="/home"
           element={

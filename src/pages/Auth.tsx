@@ -1,12 +1,22 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useToast } from '../components/ui/use-toast';
 import { useGameStore } from '../lib/store';
 import { Card } from '../components/ui/card';
+
+interface PlayerData {
+  id: string;
+  username: string | null;
+  current_rank: string;
+  sanity_points: number;
+  paperwork_completed: number;
+  medals_earned: number;
+}
 
 export default function Auth() {
   const [email, setEmail] = useState('');
@@ -16,27 +26,92 @@ export default function Auth() {
   const { toast } = useToast();
   const { setIsGuest } = useGameStore();
 
+  const createPlayerProfile = async (supabase: SupabaseClient, userId: string) => {
+    try {
+      const { data, error: insertError } = await supabase
+        .from('players')
+        .insert([{
+          id: userId,
+          username: null,
+          current_rank: 'Lieutenant',
+          sanity_points: 100,
+          paperwork_completed: 0,
+          medals_earned: 0
+        }])
+        .select()
+        .single();
+
+      if (insertError) {
+        throw new Error(`Error inserting player: ${insertError.message}`);
+      }
+
+      console.log('Successfully created player profile:', data);
+      return data;
+    } catch (error) {
+      console.error('Error in createPlayerProfile:', error);
+      throw error;
+    }
+  };
+
   const handleAuth = async (type: 'login' | 'signup') => {
     try {
       setLoading(true);
-      const { error } =
-        type === 'signup'
-          ? await supabase.auth.signUp({ email, password })
-          : await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      toast({
-        title: type === 'signup' ? 'Account created!' : 'Welcome back!',
-        description:
-          type === 'signup'
-            ? 'You can now start your desk duty.'
-            : 'Ready to handle some paperwork?',
-      });
-      navigate('/home');
+
+      if (!email || !password) {
+        throw new Error('Email and password are required.');
+      }
+
+      if (password.length < 6) {
+        throw new Error('Password must be at least 6 characters long.');
+      }
+
+      const { data: authData, error: authError } = type === 'signup'
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
+
+      if (authError) throw authError;
+
+      if (type === 'signup' && authData?.user) {
+        try {
+          await createPlayerProfile(supabase, authData.user.id);
+          navigate('/set-username');
+          toast({
+            title: 'Account created!',
+            description: 'Please set your username to continue.',
+          });
+          return;
+        } catch (profileError) {
+          console.error('Failed to create player profile:', profileError);
+          await supabase.auth.admin.deleteUser(authData.user.id);
+          throw new Error('Failed to create player profile. Please try again.');
+        }
+      } else {
+        const { data: player } = await supabase
+          .from('players')
+          .select('username')
+          .eq('id', authData?.user?.id)
+          .single();
+
+        if (!player?.username) {
+          navigate('/set-username');
+          toast({
+            title: 'Welcome back!',
+            description: 'Please set your username to continue.',
+          });
+          return;
+        }
+
+        toast({
+          title: 'Welcome back!',
+          description: 'Ready to handle some paperwork?',
+        });
+        navigate('/home');
+      }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Auth error:', error);
       toast({
         title: 'Error',
-        description: 'Authentication failed. Please try again.',
+        description: error instanceof Error ? error.message : 'Authentication failed',
         variant: 'destructive',
       });
     } finally {
@@ -44,13 +119,34 @@ export default function Auth() {
     }
   };
 
-  const continueAsGuest = () => {
-    setIsGuest(true);
-    toast({
-      title: 'Welcome Guest Officer!',
-      description: "Your progress won't be saved, but you can still enjoy the game.",
-    });
-    navigate('/home');
+  const continueAsGuest = async () => {
+    try {
+      setLoading(true);
+      const { data: { session }, error } = await supabase.auth.signInWithPassword({
+        email: 'guest@military.gov',
+        password: 'guest123'  // Make sure this matches your actual guest account password
+      });
+
+      if (error) throw error;
+
+      setIsGuest(true);
+      toast({
+        title: 'Welcome Guest Officer!',
+        description: "Your progress won't be saved, but you can still enjoy the game.",
+      });
+      navigate('/home');
+    } catch (error) {
+      console.error('Guest login error:', error);
+      // Fallback to local guest mode if server auth fails
+      setIsGuest(true);
+      toast({
+        title: 'Welcome Guest Officer!',
+        description: "Running in offline mode. Your progress won't be saved.",
+      });
+      navigate('/home');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -60,7 +156,7 @@ export default function Auth() {
           <h2 className="text-3xl font-bold text-gray-800">Welcome Officer</h2>
           <p className="text-gray-600 mt-2">Sign in to begin your desk duty</p>
         </div>
-        
+
         <div className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="email" className="text-gray-700 font-medium">
@@ -112,8 +208,9 @@ export default function Auth() {
               variant="ghost"
               className="w-full text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
               onClick={continueAsGuest}
+              disabled={loading}
             >
-              Continue as Guest
+              {loading ? 'Processing...' : 'Continue as Guest'}
             </Button>
           </div>
         </div>

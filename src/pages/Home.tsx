@@ -1,25 +1,117 @@
+import { useEffect, useState } from 'react';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { Medal, FileText, Coffee, Brain } from 'lucide-react';
+import { Medal, FileText, Coffee, Brain, LogOut } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { Link, useNavigate } from 'react-router-dom';
+import { useToast } from '../components/ui/use-toast';
 
 export default function Home() {
   const navigate = useNavigate();
+  const [username, setUsername] = useState<string>('Officer');
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchUsername = async () => {
+      try {
+        setLoading(true);
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError) {
+          console.error('Auth error:', authError);
+          navigate('/auth');
+          return;
+        }
+
+        if (!user) {
+          navigate('/auth');
+          return;
+        }
+
+        const { data: player, error: playerError } = await supabase
+          .from('players')
+          .select('username')
+          .eq('id', user.id)
+          .single();
+
+        if (playerError) {
+          console.error('Error fetching username:', playerError);
+          return;
+        }
+
+        if (player && player.username) {
+          setUsername(player.username);
+        } else {
+          // If username is not set, redirect to username setup
+          navigate('/set-username');
+        }
+      } catch (error) {
+        console.error('Error in fetchUsername:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUsername();
+  }, [navigate]);
+
+  const handleSignOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      toast({
+        title: 'Signed out successfully',
+        description: 'See you next time!',
+      });
+      navigate('/auth');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to sign out. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const handleStartDuty = () => {
-    // Direct navigation to Game
     navigate('/game');
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-indigo-50 flex items-center justify-center">
+        <p className="text-xl text-gray-600">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-indigo-50">
       <div className="container mx-auto px-4 py-16">
+        {/* Header with Sign Out Button */}
+        <div className="flex justify-end mb-8">
+          <Button
+            variant="ghost"
+            className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50"
+            onClick={handleSignOut}
+          >
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </Button>
+        </div>
+
         <div className="text-center mb-16">
           <h1 className="text-5xl font-bold mb-4 text-gray-800">
             Operation Desk Duty
           </h1>
-          <p className="text-xl text-gray-600">
+          <p className="text-xl text-gray-600 mb-2">
             Navigate the hilarious world of military bureaucracy
+          </p>
+          <p className="text-lg font-semibold text-gray-700">
+            Welcome, {username}!
           </p>
         </div>
 
