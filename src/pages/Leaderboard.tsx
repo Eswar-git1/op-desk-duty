@@ -17,7 +17,8 @@ interface LeaderboardEntry {
   score: number;
   rank_achieved: string;
   created_at: string;
-  player: PlayerData | PlayerData[];  // Handle both single object and array cases
+  // Use the relationship name from your foreign key constraint (usually matching the table name)
+  players: PlayerData | PlayerData[];
 }
 
 export default function Leaderboard() {
@@ -41,7 +42,7 @@ export default function Leaderboard() {
           score,
           rank_achieved,
           created_at,
-          player:player_id (
+          players (
             username,
             current_rank,
             medals_earned
@@ -52,14 +53,14 @@ export default function Leaderboard() {
 
       if (error) throw error;
 
-      // Handle the case where player might be an array
-      const typedData: LeaderboardEntry[] = data?.map(entry => ({
+      // Normalize the returned data so that "players" is always an object.
+      const typedData: LeaderboardEntry[] = data?.map((entry) => ({
         ...entry,
-        player: Array.isArray(entry.player) ? entry.player[0] : entry.player
+        players: Array.isArray(entry.players) ? entry.players[0] : entry.players,
       })) || [];
 
-      console.log('Raw data from Supabase:', data); // Debug log
-      console.log('Processed data:', typedData); // Debug log
+      console.log('Raw data from Supabase:', data);
+      console.log('Processed data:', typedData);
 
       setEntries(typedData);
     } catch (error) {
@@ -69,14 +70,14 @@ export default function Leaderboard() {
     }
   };
 
+  // Update this function to use the "players" field
   const getPlayerData = (entry: LeaderboardEntry): PlayerData => {
-    if (Array.isArray(entry.player)) {
-      return entry.player[0] || { username: 'Anonymous', current_rank: 'Unknown', medals_earned: 0 };
+    if (Array.isArray(entry.players)) {
+      return entry.players[0] || { username: 'Anonymous', current_rank: 'Unknown', medals_earned: 0 };
     }
-    return entry.player || { username: 'Anonymous', current_rank: 'Unknown', medals_earned: 0 };
+    return entry.players || { username: 'Anonymous', current_rank: 'Unknown', medals_earned: 0 };
   };
 
-  // Rest of the component remains the same, but update player data access:
   const handleStartGame = () => {
     resetGame();
     navigate('/game');
@@ -91,6 +92,11 @@ export default function Leaderboard() {
     } catch (error) {
       console.error('Error signing out:', error);
     }
+  };
+
+  // New handler to navigate to the Home page
+  const handleGoHome = () => {
+    navigate('/home');
   };
 
   const getRankIcon = (index: number) => {
@@ -176,7 +182,7 @@ export default function Leaderboard() {
 
                     <div className="flex-grow">
                       <h3 className="font-bold text-gray-800 text-lg">
-                        {playerData.username || 'Anonymous Officer'}
+                        {getPlayerData(entry).username || 'Anonymous Officer'}
                       </h3>
                       <div className="flex gap-2 items-center">
                         <p className="text-sm text-gray-600 font-medium">
@@ -206,10 +212,10 @@ export default function Leaderboard() {
 
         <div className="flex justify-between">
           <button
-            onClick={handleStartGame}
-            className="px-6 py-3 bg-indigo-500 text-white text-lg font-medium rounded-lg shadow hover:bg-indigo-600 transition-all"
+            onClick={handleGoHome}
+            className="px-6 py-3 bg-green-500 text-white text-lg font-medium rounded-lg shadow hover:bg-green-600 transition-all"
           >
-            Start New Game
+            Home
           </button>
           <button
             onClick={handleSignOut}

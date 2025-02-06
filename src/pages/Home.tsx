@@ -3,7 +3,7 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Medal, FileText, Coffee, Brain, LogOut } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/use-toast';
 
 export default function Home() {
@@ -78,6 +78,11 @@ export default function Home() {
 
   const handleStartDuty = () => {
     navigate('/game');
+  };
+
+  // New handler for navigating to the leaderboard
+  const handleLeaderboard = () => {
+    navigate('/leaderboard');
   };
 
   if (loading) {
@@ -165,13 +170,21 @@ export default function Home() {
           </Card>
         </div>
 
-        <div className="text-center">
+        <div className="flex flex-col items-center gap-4">
           <Button
             size="lg"
             className="bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white px-8 py-4 text-lg shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5"
             onClick={handleStartDuty}
           >
             Start Your Duty
+          </Button>
+          {/* New button to navigate to the Leaderboard */}
+          <Button
+            size="lg"
+            className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-8 py-4 text-lg shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5"
+            onClick={handleLeaderboard}
+          >
+            View Leaderboard
           </Button>
         </div>
       </div>
