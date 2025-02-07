@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "esnext", // Change "es5" to "esnext" for modern ES features
+    "target": "esnext",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
@@ -8,12 +8,12 @@
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "node", // Change "bundler" to "node"
+    "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "types": ["vite/client"], // Add Vite client types
+    "types": ["vite/client"],
     "plugins": [
       {
         "name": "next"
