@@ -17,8 +17,7 @@ interface LeaderboardEntry {
   score: number;
   rank_achieved: string;
   created_at: string;
-  // Use the relationship name from your foreign key constraint (usually matching the table name)
-  players: PlayerData | PlayerData[];
+  players: PlayerData | PlayerData[] | null;
 }
 
 export default function Leaderboard() {
@@ -59,9 +58,6 @@ export default function Leaderboard() {
         players: Array.isArray(entry.players) ? entry.players[0] : entry.players,
       })) || [];
 
-      console.log('Raw data from Supabase:', data);
-      console.log('Processed data:', typedData);
-
       setEntries(typedData);
     } catch (error) {
       console.error('Error fetching leaderboard:', error);
@@ -70,12 +66,11 @@ export default function Leaderboard() {
     }
   };
 
-  // Update this function to use the "players" field
   const getPlayerData = (entry: LeaderboardEntry): PlayerData => {
-    if (Array.isArray(entry.players)) {
-      return entry.players[0] || { username: 'Anonymous', current_rank: 'Unknown', medals_earned: 0 };
+    if (entry.players && typeof entry.players === 'object') {
+      return entry.players as PlayerData;
     }
-    return entry.players || { username: 'Anonymous', current_rank: 'Unknown', medals_earned: 0 };
+    return { username: 'Unknown Officer', current_rank: 'Unknown', medals_earned: 0 };
   };
 
   const handleStartGame = () => {
@@ -94,7 +89,6 @@ export default function Leaderboard() {
     }
   };
 
-  // New handler to navigate to the Home page
   const handleGoHome = () => {
     navigate('/home');
   };
@@ -182,7 +176,7 @@ export default function Leaderboard() {
 
                     <div className="flex-grow">
                       <h3 className="font-bold text-gray-800 text-lg">
-                        {getPlayerData(entry).username || 'Anonymous Officer'}
+                        {getPlayerData(entry).username}
                       </h3>
                       <div className="flex gap-2 items-center">
                         <p className="text-sm text-gray-600 font-medium">
@@ -210,7 +204,13 @@ export default function Leaderboard() {
           </div>
         )}
 
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-4">
+          <button
+            onClick={handleStartGame}
+            className="px-6 py-3 bg-blue-500 text-white text-lg font-medium rounded-lg shadow hover:bg-blue-600 transition-all"
+          >
+            Start Game Again
+          </button>
           <button
             onClick={handleGoHome}
             className="px-6 py-3 bg-green-500 text-white text-lg font-medium rounded-lg shadow hover:bg-green-600 transition-all"

@@ -9,10 +9,7 @@ import { supabase } from '../lib/supabase';
 import { Howl } from 'howler';
 import { useToast } from '../components/ui/use-toast';
 import {
-  Coffee,
   Brain,
-  Medal,
-  FileText,
   Sparkles,
   Star,
   Trophy,
@@ -39,7 +36,6 @@ const levelUpSound = new Howl({
   preload: true,
 });
 
-// Note: If you see a 403 error for this sound, host the file locally or choose another URL.
 const gameOverSound = new Howl({
   src: ['https://assets.mixkit.co/sfx/preview/mixkit-game-over-arcade-1943.mp3'],
   volume: 0.5,
@@ -49,6 +45,16 @@ const gameOverSound = new Howl({
 const buttonHoverSound = new Howl({
   src: ['https://assets.mixkit.co/sfx/preview/mixkit-click-melodic-tone-1129.mp3'],
   volume: 0.2,
+  preload: true,
+});
+
+//
+// BACKGROUND MUSIC (BGM)
+//
+const bgmSound = new Howl({
+  src: ['https://assets.mixkit.co/music/preview/mixkit-epic-cinematic-ambient.mp3'], // change this URL as needed
+  volume: 0.3,
+  loop: true,
   preload: true,
 });
 
@@ -133,15 +139,24 @@ export default function Game() {
     setCurrentRank,
     addAnsweredQuestion,
     resetLevelProgress,
+    resetGame, // resets session-specific state (e.g. answered questions, correct/wrong counts, session medals)
     setFinalScore,
     isGuest,
   } = useGameStore();
 
-  // ─── RESET SANITY AND CHAI LEVELS AT SESSION START ─────────────────────
+  // ─── RESET SESSION STATE & START BGM WHEN GAME STARTS ─────────────────────
   useEffect(() => {
+    // Clear session state (but leave persistent progress like rank/level intact)
+    resetGame();
     setSanityPoints(100);
     setChaiLevel(100);
-  }, [setSanityPoints, setChaiLevel]);
+
+    // Start background music
+    bgmSound.play();
+    return () => {
+      bgmSound.stop();
+    };
+  }, [resetGame, setSanityPoints, setChaiLevel]);
 
   // ─── FETCH THE NEXT SCENARIO (RANDOMIZE QUESTION & SHUFFLE OPTIONS) ─────
   const fetchNextScenario = useCallback(async () => {
@@ -242,11 +257,10 @@ export default function Game() {
             } else if (data) {
               setCurrentRank(data.current_rank ?? RANKS[0]);
               setPaperworkCompleted(data.paperwork_completed ?? 0);
-              setMedals(data.medals_earned ?? 0);
-              // Derive level from saved rank
+              // Do NOT carry over previous session medals—start fresh for new session.
+              // Derive level from saved rank.
               const level = RANKS.findIndex((rank) => rank === data.current_rank) + 1;
               setCurrentLevel(level > 0 ? level : 1);
-              // Reset sanity and chai at session start
               setSanityPoints(100);
               setChaiLevel(100);
             }
@@ -264,7 +278,6 @@ export default function Game() {
     setChaiLevel,
     setCurrentRank,
     setPaperworkCompleted,
-    setMedals,
     setCurrentLevel,
     toast,
   ]);
@@ -275,33 +288,30 @@ export default function Game() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          const { error } = await supabase
+          await supabase
             .from('players')
             .update({
               sanity_points: sanityPoints,
               current_rank: currentRank,
-              medals_earned: medals,
+              // Note: We avoid updating medals_earned with the session medals.
               paperwork_completed: paperworkCompleted,
             })
             .eq('id', user.id);
-
-          if (error) {
-            console.error('Error updating player progress:', error);
-            toast({
-              title: '❌ Error',
-              description: 'Failed to update progress.',
-              variant: 'destructive',
-            });
-          }
         }
       } catch (err) {
         console.error('Error in updatePlayerProgress:', err);
+        toast({
+          title: '❌ Error',
+          description: 'Failed to update progress.',
+          variant: 'destructive',
+        });
       }
     }
   };
 
   // ─── GAME OVER HANDLER ──────────────────────────────────────────────────────
   const handleGameOver = async () => {
+    // Calculate final score using session-specific counters.
     const finalScore = medals * 100 + correctAnswers * 50;
     setFinalScore(finalScore);
 
@@ -343,7 +353,7 @@ export default function Game() {
       ? 0
       : -Math.floor(baseSanityLoss * SANITY_PENALTY_MULTIPLIER);
 
-    // Compute new counts locally
+    // Update counts locally
     const newCorrectAnswers = solutionIndex === currentScenario.correct_solution_index
       ? correctAnswers + 1
       : correctAnswers;
@@ -351,25 +361,24 @@ export default function Game() {
       ? wrongAnswers
       : wrongAnswers + 1;
 
-    // Play appropriate sound and update stats
     if (solutionIndex === currentScenario.correct_solution_index) {
       successSound.play();
       setMedals(medals + 1);
       setPaperworkCompleted(paperworkCompleted + 1);
-      setCorrectAnswers(correctAnswers + 1);
+      setCorrectAnswers(newCorrectAnswers);
     } else {
       failureSound.play();
-      setWrongAnswers(wrongAnswers + 1);
+      setWrongAnswers(newWrongAnswers);
       setSanityPoints(Math.max(0, sanityPoints + sanityChange));
     }
     setChaiLevel(Math.max(0, chaiLevel - 10));
 
-    // Ensure no repetition: mark question as answered
+    // Mark this scenario as answered to avoid repetition.
     if (currentScenario.id) {
       addAnsweredQuestion(currentScenario.id);
     }
 
-    // Record progress for logged-in users
+    // Record progress for logged-in users.
     if (!isGuest && currentScenario.id) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -394,7 +403,7 @@ export default function Game() {
       variant: solutionIndex === currentScenario.correct_solution_index ? 'default' : 'destructive',
     });
 
-    // Update progress in the database for logged-in users
+    // Update persistent progress for logged-in users.
     await updatePlayerProgress();
 
     if (chaiLevel <= 20) {
@@ -404,25 +413,23 @@ export default function Game() {
       });
     }
 
-    // Check for level promotion or game over
+    // Check for level promotion or game over.
     if (newCorrectAnswers >= QUESTIONS_TO_LEVEL_UP) {
-      // Promote level
       levelUpSound.play();
       setCurrentLevel(currentLevel + 1);
       setCurrentRank(RANKS[currentLevel]); // currentLevel before increment equals new level rank
-      resetLevelProgress(); // Ensure correctAnswers and wrongAnswers are reset
+      resetLevelProgress(); // Reset session progress for the new level
       toast({
         title: `${emojis.levelUp} Promotion!`,
         description: `Congratulations! You've been promoted to ${RANKS[currentLevel]}!`,
       });
       updatePlayerProgress();
     } else if (newWrongAnswers >= MAX_WRONG_ALLOWED) {
-      // End game if user gets 3 wrong answers
       handleGameOver();
       return;
     }
 
-    // Wait a moment before loading the next scenario
+    // Wait briefly before loading the next scenario.
     setTimeout(() => {
       setIsAnswering(false);
       setIsTransitioning(false);
